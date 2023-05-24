@@ -1,29 +1,99 @@
 package com.example.myhomeworks
+
+import android.app.Activity
 import android.os.Bundle
-import androidx.appcompat.app.AppCompatActivity
+import android.view.View
+import android.widget.Button
+import android.widget.EditText
+import android.widget.TextView
+import android.widget.Toast
+import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import retrofit2.Call
+import retrofit2.Callback
+import retrofit2.Response
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
 
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : Activity() {
+
+    private val imdbBaseUrl = "https://imdb-api.com"
+
+    private val retrofit = Retrofit.Builder()
+        .baseUrl(imdbBaseUrl)
+        .addConverterFactory(GsonConverterFactory.create())
+        .build()
+
+    private val imdbService = retrofit.create(IMDbApi::class.java)
+
+    private lateinit var searchButton: Button
+    private lateinit var queryInput: EditText
+    private lateinit var placeholderMessage: TextView
+    private lateinit var moviesList: RecyclerView
+
+    private val movies = ArrayList<MovieData>()
+
+    private val adapter = MoviesAdapter()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        setContentView(R.layout.movies_activity)
 
+        placeholderMessage = findViewById(R.id.placeholderM)
+        searchButton = findViewById(R.id.button_search)
+        queryInput = findViewById(R.id.inputEditText)
+        moviesList = findViewById(R.id.recycler)
 
+        adapter.movies = movies
 
-        val weatherAdapter = WeatherAdapter(
-            listOf(
-                DailyWeather("Пн", true, -23),
-                DailyWeather("Вт", true, -20),
-                DailyWeather("Ср", false, -15),
-                DailyWeather("Чт", true, -3),
-                DailyWeather("Пт", false, +6),
-                DailyWeather("Сб", false, +11),
-                DailyWeather("Вс", true, +20),
-            )
-        )
+        moviesList.layoutManager = LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false)
+        moviesList.adapter = adapter
 
-        val rvWeather = findViewById<RecyclerView>(R.id.rvWeather)
-        rvWeather.adapter = weatherAdapter
+        searchButton.setOnClickListener {
+            if (queryInput.text.isNotEmpty()) {
+                imdbService.findMovie(queryInput.text.toString()).enqueue(object :
+                    Callback<MoviesResponse> {
+                    override fun onResponse(call: Call<MoviesResponse>,
+                                            response: Response<MoviesResponse>
+                    ) {
+                        if (response.code() == 200) {
+                            movies.clear()
+                            if (response.body()?.results?.isNotEmpty() == true) {
+                                movies.addAll(response.body()?.results!!)
+                                adapter.notifyDataSetChanged()
+                            }
+                            if (movies.isEmpty()) {
+                                showMessage(getString(R.string.error), "")
+                            } else {
+                                showMessage("", "")
+                            }
+                        } else {
+                            showMessage(getString(R.string.something_went_wrong), response.code().toString())
+                        }
+                    }
+
+                    override fun onFailure(call: Call<MoviesResponse>, t: Throwable) {
+                        showMessage(getString(R.string.something_went_wrong), t.message.toString())
+                    }
+
+                })
+            }
+        }
     }
-} 
+
+    private fun showMessage(text: String, additionalMessage: String) {
+        if (text.isNotEmpty()) {
+            placeholderMessage.visibility = View.VISIBLE
+            movies.clear()
+            adapter.notifyDataSetChanged()
+            placeholderMessage.text = text
+            if (additionalMessage.isNotEmpty()) {
+                Toast.makeText(applicationContext, additionalMessage, Toast.LENGTH_LONG)
+                    .show()
+            }
+        } else {
+            placeholderMessage.visibility = View.GONE
+        }
+    }
+}
